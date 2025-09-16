@@ -8,10 +8,10 @@ export async function createPoll(formData: FormData) {
   const supabase = await createClient();
 
   const question = formData.get("question") as string;
-  const options = formData.getAll("options").filter(Boolean) as string[];
+  const options = formData.getAll("options").filter(Boolean).map(opt => (typeof opt === "string" ? opt.trim() : "")).filter(opt => opt.length > 0) as string[];
 
-  if (!question || options.length < 2) {
-    return { error: "Please provide a question and at least two options." };
+  if (!question || question.trim().length < 5 || options.length < 2 || options.some(opt => opt.length < 1)) {
+    return { error: "Please provide a valid question (min 5 chars) and at least two non-empty options." };
   }
 
   // Get user from session
@@ -29,7 +29,7 @@ export async function createPoll(formData: FormData) {
   const { error } = await supabase.from("polls").insert([
     {
       user_id: user.id,
-      question,
+      question: question.trim(),
       options,
     },
   ]);
@@ -76,13 +76,24 @@ export async function getPollById(id: string) {
 // SUBMIT VOTE
 export async function submitVote(pollId: string, optionIndex: number) {
   const supabase = await createClient();
+  // Fetch poll settings
+  const { data: poll, error: pollError } = await supabase.from("polls").select("requireAuthentication, allowMultipleVotes").eq("id", pollId).single();
+  if (pollError || !poll) {
+    return { error: "Poll not found." };
+  }
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  // Optionally require login to vote
-  // if (!user) return { error: 'You must be logged in to vote.' };
-
+  if (poll.requireAuthentication && !user) {
+    return { error: "You must be logged in to vote on this poll." };
+  }
+  if (poll.allowMultipleVotes === false && user) {
+    // Check if user already voted
+    const { data: existingVote } = await supabase.from("votes").select("id").eq("poll_id", pollId).eq("user_id", user.id).single();
+    if (existingVote) {
+      return { error: "You have already voted on this poll." };
+    }
+  }
   const { error } = await supabase.from("votes").insert([
     {
       poll_id: pollId,
@@ -90,7 +101,6 @@ export async function submitVote(pollId: string, optionIndex: number) {
       option_index: optionIndex,
     },
   ]);
-
   if (error) return { error: error.message };
   return { error: null };
 }
@@ -98,7 +108,19 @@ export async function submitVote(pollId: string, optionIndex: number) {
 // DELETE POLL
 export async function deletePoll(id: string) {
   const supabase = await createClient();
-  const { error } = await supabase.from("polls").delete().eq("id", id);
+  // Get user from session
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  if (userError) {
+    return { error: userError.message };
+  }
+  if (!user) {
+    return { error: "You must be logged in to delete a poll." };
+  }
+  // Only allow deleting polls owned by the user
+  const { error } = await supabase.from("polls").delete().eq("id", id).eq("user_id", user.id);
   if (error) return { error: error.message };
   revalidatePath("/polls");
   return { error: null };
@@ -109,10 +131,10 @@ export async function updatePoll(pollId: string, formData: FormData) {
   const supabase = await createClient();
 
   const question = formData.get("question") as string;
-  const options = formData.getAll("options").filter(Boolean) as string[];
+  const options = formData.getAll("options").filter(Boolean).map(opt => (typeof opt === "string" ? opt.trim() : "")).filter(opt => opt.length > 0) as string[];
 
-  if (!question || options.length < 2) {
-    return { error: "Please provide a question and at least two options." };
+  if (!question || question.trim().length < 5 || options.length < 2 || options.some(opt => opt.length < 1)) {
+    return { error: "Please provide a valid question (min 5 chars) and at least two non-empty options." };
   }
 
   // Get user from session
@@ -130,7 +152,7 @@ export async function updatePoll(pollId: string, formData: FormData) {
   // Only allow updating polls owned by the user
   const { error } = await supabase
     .from("polls")
-    .update({ question, options })
+    .update({ question: question.trim(), options })
     .eq("id", pollId)
     .eq("user_id", user.id);
 
