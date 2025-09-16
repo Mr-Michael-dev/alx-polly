@@ -1,3 +1,5 @@
+// LoginPage handles user authentication by validating credentials and establishing a session.
+// The intent is to securely log users in and redirect them to their dashboard upon success.
 'use client';
 
 import { useState } from 'react';
@@ -9,9 +11,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { login } from '@/app/lib/actions/auth-actions';
 
 export default function LoginPage() {
+  // Track error state to inform user of authentication issues
   const [error, setError] = useState<string | null>(null);
+  // Track loading state to prevent duplicate submissions
   const [loading, setLoading] = useState(false);
 
+  // Handles form submission for login
+  // Intent: Prevent default reload, validate input, and initiate login flow
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLoading(true);
@@ -21,12 +27,15 @@ export default function LoginPage() {
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
 
+    // Call server action to authenticate user
     const result = await login({ email, password });
 
     if (result?.error) {
+      // Show error if authentication fails
       setError(result.error);
       setLoading(false);
     } else {
+      // Redirect to polls dashboard after successful login
       window.location.href = '/polls'; // Full reload to pick up session
     }
   };

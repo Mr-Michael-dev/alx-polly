@@ -20,6 +20,8 @@ interface Poll {
   options: string[];
 }
 
+// AdminPage displays administrative controls and analytics for poll management
+// Intent: Provide admins with tools to oversee poll activity and user engagement
 export default function AdminPage() {
   const [polls, setPolls] = useState<Poll[]>([]);
   const [loading, setLoading] = useState(true);
